@@ -4,6 +4,7 @@ use dotenv;
 use rocket::*;
 use rocket_contrib::json::Json;
 use serde_json::json;
+mod middleware;
 mod models;
 pub use models::address::BTCAddress;
 pub use models::address::BTCAddressResponse;
@@ -24,7 +25,7 @@ async fn create_address(
         error: json!(""),
     };
     if currency == "BTC" {
-        let request_url = format!("{}", BTCNODE);
+        let request_url = format!("{}wallet/", BTCNODE);
         let USER = dotenv::var("USER").unwrap();
         let PASSWORD = dotenv::var("PASSWORD").unwrap();
         let body = json!({
@@ -53,6 +54,7 @@ async fn create_address(
 
 fn main() {
     rocket::ignite()
-        .mount("/", routes![index, create_address])
+        .mount("/", routes![index])
+        .mount("/api", routes![create_address])
         .launch();
 }
