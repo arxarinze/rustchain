@@ -1,27 +1,16 @@
 #![feature(proc_macro_hygiene, decl_macro)]
-
 use base64::encode;
 use dotenv;
 use rocket::*;
 use rocket_contrib::json::Json;
-use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
+mod models;
+pub use models::address::BTCAddress;
+pub use models::address::BTCAddressResponse;
 const BTCNODE: &'static str = "http://3.8.39.172:18332/";
 #[get("/")]
 fn index() -> &'static str {
     return "The World Is Yours!";
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-struct BTCAddressResponse {
-    result: Option<String>,
-    id: serde_json::Value,
-    error: serde_json::Value,
-}
-#[derive(Deserialize, Serialize, Debug, Responder)]
-#[response(content_type = "json")]
-struct BTCAddress {
-    address: Option<String>,
 }
 
 #[tokio::main]
