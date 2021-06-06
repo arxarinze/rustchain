@@ -14,7 +14,31 @@ pub use models::address::BTCAddress;
 pub use models::address::BTCAddressResponse;
 pub use models::privatekey::BTCPrivateKey;
 pub use models::privatekey::BTCPrivateKeyResponse;
+use rocket::fairing::{Fairing, Info, Kind};
+use rocket::http::Header;
+use rocket::{Request, Response};
 use std::thread;
+
+pub struct CORS;
+
+impl Fairing for CORS {
+    fn info(&self) -> Info {
+        Info {
+            name: "Add CORS headers to responses",
+            kind: Kind::Response,
+        }
+    }
+
+    fn on_response(&self, request: &Request, response: &mut Response) {
+        response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+        response.set_header(Header::new(
+            "Access-Control-Allow-Methods",
+            "POST, GET, PATCH, OPTIONS",
+        ));
+        response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+        response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+    }
+}
 
 #[get("/")]
 fn index() -> &'static str {
@@ -107,6 +131,7 @@ async fn create_address(
 
 fn main() {
     rocket::ignite()
+        .attach(CORS)
         .mount("/", routes![index])
         .mount("/api", routes![create_address])
         .launch();
