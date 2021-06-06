@@ -12,12 +12,11 @@ pub struct BTCAddressResponse {
     pub error: serde_json::Value,
 }
 #[derive(Deserialize, Serialize, Debug)]
-
-pub struct BTCAddress {
+pub struct AddressObject {
     pub address: String,
     pub privatekey: String,
 }
-impl<'r> Responder<'r> for BTCAddress {
+impl<'r> Responder<'r> for AddressObject {
     fn respond_to(self, _: &Request) -> response::Result<'r> {
         Response::build()
             .sized_body(Cursor::new(format!("{}:{}", self.address, self.privatekey)))
