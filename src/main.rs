@@ -1,14 +1,15 @@
 #![feature(proc_macro_hygiene, decl_macro)]
-use amiquip::{
-    AmqpValue, Channel, Connection, ConsumerMessage, ConsumerOptions, Exchange, FieldTable,
-    Publish, QueueDeclareOptions, Result,
-};
+// use amiquip::{
+//     AmqpValue, Channel, Connection, ConsumerMessage, ConsumerOptions, Exchange, FieldTable,
+//     Publish, QueueDeclareOptions, Result,
+// };
 use base64::encode;
 use dotenv;
 use rocket::*;
 use rocket_contrib::json::Json;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 mod middleware;
 mod models;
 use chrono::{DateTime, Datelike, Timelike, Utc};
@@ -19,6 +20,9 @@ pub use models::address::AddressObject;
 pub use models::address::BTCAddressResponse;
 pub use models::privatekey::BTCPrivateKey;
 pub use models::privatekey::BTCPrivateKeyResponse;
+pub use models::transaction::RawTx;
+pub use models::transaction::Transfer;
+pub use models::transaction::TxResponse;
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::Header;
 use rocket::{Request, Response};
@@ -68,9 +72,9 @@ async fn getBitcoinAddressPrivateKey(
         id: json!(""),
         error: json!(""),
     };
-    let request_url = format!("{}wallet/", BTCNODE);
-    let USER = dotenv::var("USER").unwrap();
-    let PASSWORD = dotenv::var("PASSWORD").unwrap();
+    let request_url = format!("{}wallet/ipay", BTCNODE);
+    let USER = dotenv::var("BTCUSER").unwrap();
+    let PASSWORD = dotenv::var("BTCPASSWORD").unwrap();
     let body = json!({
         "jsonrpc": "1.0",
         "id": "curltest",
@@ -96,6 +100,60 @@ async fn getBitcoinAddressPrivateKey(
 }
 
 #[tokio::main]
+#[post(
+    "/transfer/<currency>",
+    format = "application/json",
+    data = "<transfer>"
+)]
+async fn create_transfer(
+    currency: &http::RawStr,
+    transfer: Json<Transfer>,
+) -> std::result::Result<Json<TxResponse>, reqwest::Error> {
+    let BTCNODE = dotenv::var("BTCNODE").unwrap();
+    let ETHNODE = dotenv::var("ETHNODE").unwrap();
+    let t_obj: Json<Transfer> = transfer;
+    println!("{:?}", t_obj);
+    let mut response: TxResponse = TxResponse {
+        txHash: std::option::Option::Some(String::new()),
+    };
+    if (currency == "BTC") {
+        let request_url = format!("{}wallet/ipay", BTCNODE);
+        let USER = dotenv::var("BTCUSER").unwrap();
+        let PASSWORD = dotenv::var("BTCPASSWORD").unwrap();
+        let auth = format!("Basic {}", encode(USER + ":" + &PASSWORD));
+        let body = json!({
+            "jsonrpc": "1.0",
+            "id": "curltest",
+            "method": "listunspent",
+            "params": [
+                0,
+                9999999, [t_obj.sender]
+            ]
+        });
+        println!("{:?}", body);
+        let client = reqwest::Client::new();
+        let res = client
+            .post(request_url)
+            .header("Authorization", auth)
+            .json(&body)
+            .send()
+            .await?;
+
+        let test: serde_json::Value = res.json().await?;
+        let working: HashMap<String, serde_json::Value> =
+            serde_json::from_str(&format!("{}", test)).unwrap();
+        let result = working["result"].as_array().unwrap();
+        let length = result.len();
+        for obj in result.iter() {
+            println!("{}", obj)
+        }
+        let mut rawTx: Vec<RawTx> = Vec::<RawTx>::new();
+        println!("{:?}", length);
+    }
+    return Ok(Json(response));
+}
+
+#[tokio::main]
 #[get("/address/<currency>")]
 async fn create_address(
     currency: &http::RawStr,
@@ -111,9 +169,9 @@ async fn create_address(
         privatekey: String::new(),
     };
     if currency == "BTC" {
-        let request_url = format!("{}wallet/", BTCNODE);
-        let USER = dotenv::var("USER").unwrap();
-        let PASSWORD = dotenv::var("PASSWORD").unwrap();
+        let request_url = format!("{}wallet/ipay", BTCNODE);
+        let USER = dotenv::var("BTCUSER").unwrap();
+        let PASSWORD = dotenv::var("BTCPASSWORD").unwrap();
         let body = json!({
             "jsonrpc": "1.0",
             "id": "curltest",
@@ -174,6 +232,6 @@ fn main() {
     rocket::ignite()
         .attach(CORS)
         .mount("/", routes![index])
-        .mount("/api", routes![create_address])
+        .mount("/api", routes![create_address, create_transfer])
         .launch();
 }
