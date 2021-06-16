@@ -20,7 +20,6 @@ pub use models::address::AddressObject;
 pub use models::address::BTCAddressResponse;
 pub use models::privatekey::BTCPrivateKey;
 pub use models::privatekey::BTCPrivateKeyResponse;
-pub use models::transaction::RawTx;
 pub use models::transaction::Transfer;
 pub use models::transaction::TxResponse;
 use rocket::fairing::{Fairing, Info, Kind};
@@ -112,9 +111,8 @@ async fn create_transfer(
     let BTCNODE = dotenv::var("BTCNODE").unwrap();
     let ETHNODE = dotenv::var("ETHNODE").unwrap();
     let t_obj: Json<Transfer> = transfer;
-    println!("{:?}", t_obj);
     let mut response: TxResponse = TxResponse {
-        txHash: std::option::Option::Some(String::new()),
+        txHash: String::new(),
     };
     if (currency == "BTC") {
         let request_url = format!("{}wallet/ipay", BTCNODE);
@@ -130,11 +128,10 @@ async fn create_transfer(
                 9999999, [t_obj.sender]
             ]
         });
-        println!("{:?}", body);
         let client = reqwest::Client::new();
         let res = client
-            .post(request_url)
-            .header("Authorization", auth)
+            .post(request_url.clone())
+            .header("Authorization", auth.clone())
             .json(&body)
             .send()
             .await?;
@@ -144,11 +141,82 @@ async fn create_transfer(
             serde_json::from_str(&format!("{}", test)).unwrap();
         let result = working["result"].as_array().unwrap();
         let length = result.len();
+        let mut unspents: Vec<serde_json::Value> = Vec::<serde_json::Value>::new();
+        let mut total: f32 = 0.00;
         for obj in result.iter() {
-            println!("{}", obj)
+            total = (total * 100000000.0).round() / 100000000.0
+                + (format!("{}", obj["amount"]).parse::<f32>().unwrap() * 100000000.0).round()
+                    / 100000000.0;
+            unspents.push(json!({
+                "txid":obj["txid"],
+                "vout":obj["vout"]
+            }));
         }
-        let mut rawTx: Vec<RawTx> = Vec::<RawTx>::new();
-        println!("{:?}", length);
+        let body1 = json!({
+            "jsonrpc": "1.0",
+            "id": "curltest",
+            "method": "createrawtransaction",
+            "params": [
+                unspents,
+                [
+                    {
+                        format!("{}",t_obj.receiver): format!("{:.8}", t_obj.amount)
+                    },
+                    {
+                        format!("{}",t_obj.sender): format!("{:.8}",(total - t_obj.amount)-0.00001000)
+                    }
+                ]
+            ]
+        });
+        let res1 = client
+            .post(request_url.clone())
+            .header("Authorization", auth.clone())
+            .json(&body1)
+            .send()
+            .await?;
+        let test1: serde_json::Value = res1.json().await?;
+        let rawtx = test1["result"].as_str().unwrap();
+
+        let body2 = json!({
+            "jsonrpc": "1.0",
+            "id": "curltest",
+            "method": "signrawtransactionwithkey",
+            "params": [
+                rawtx,
+                [
+                    format!("{}", t_obj.privateKey)
+                ]
+            ]
+        });
+        let res2 = client
+            .post(request_url.clone())
+            .header("Authorization", auth.clone())
+            .json(&body2)
+            .send()
+            .await?;
+        let test2: serde_json::Value = res2.json().await?;
+        let hex = test2["result"]["hex"].as_str().unwrap();
+        let body3 = json!({
+            "jsonrpc": "1.0",
+            "id": "curltest",
+            "method": "sendrawtransaction",
+            "params": [
+                hex,
+                0
+            ]
+        });
+        let res3 = client
+            .post(request_url.clone())
+            .header("Authorization", auth.clone())
+            .json(&body3)
+            .send()
+            .await?;
+        let test3: serde_json::Value = res3.json().await?;
+        let result_done = test3["result"].as_str().unwrap();
+        response = TxResponse {
+            txHash: result_done.to_string(),
+        };
+        println!("{:#?}", response);
     }
     return Ok(Json(response));
 }
