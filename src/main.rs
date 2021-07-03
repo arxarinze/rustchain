@@ -323,11 +323,42 @@ async fn decode_raw_transactions(txraw:Json<TxRequest>)->std::result::Result<Jso
     return Ok(Json(decoded));
 }
 
+#[tokio::main]
+#[get("/transaction/<txid>")]
+async fn btc_get_tx(
+    txid: &http::RawStr,
+) -> std::result::Result<Json<serde_json::Value>, reqwest::Error> {
+    let BTCNODE = dotenv::var("BTCNODE").unwrap();
+    let ETHNODE = dotenv::var("ETHNODE").unwrap();
+    let request_url = format!("{}wallet/ipay", BTCNODE);
+    let USER = dotenv::var("BTCUSER").unwrap();
+    let PASSWORD = dotenv::var("BTCPASSWORD").unwrap();
+    let auth = format!("Basic {}", encode(USER + ":" + &PASSWORD));
+    let tx : String = txid.to_string();
+    let body = json!({
+        "jsonrpc": "1.0",
+        "id": "curltest",
+        "method": "gettransaction",
+        "params": [
+            tx
+        ]
+    });
+    let client = reqwest::Client::new();
+    let res = client
+        .post(request_url.clone())
+        .header("Authorization", auth.clone())
+        .json(&body)
+        .send()
+        .await?;
+    let decoded: serde_json::Value = res.json().await?;
+    return Ok(Json(decoded));
+}
+
 fn main() {
     rocket::ignite()
         .attach(CORS)
         .mount("/", routes![index])
         .mount("/api", routes![create_address, create_transfer])
-        .mount("/api/btc", routes![decode_raw_transactions])
+        .mount("/api/btc", routes![decode_raw_transactions, btc_get_tx])
         .launch();
 }
