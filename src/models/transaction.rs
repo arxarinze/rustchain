@@ -15,3 +15,8 @@ pub struct Transfer {
     pub amount: f32,
     pub privateKey: String,
 }
+
+#[derive(Debug, PartialEq, PartialOrd, Deserialize)]
+pub struct TxRequest {
+    pub rawtx: String,
+}

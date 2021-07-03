@@ -21,6 +21,7 @@ pub use models::address::BTCAddressResponse;
 pub use models::privatekey::BTCPrivateKey;
 pub use models::privatekey::BTCPrivateKeyResponse;
 pub use models::transaction::Transfer;
+pub use models::transaction::TxRequest;
 pub use models::transaction::TxResponse;
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::Header;
@@ -296,10 +297,37 @@ fn delete_keystore(filename: String) -> std::io::Result<()> {
     Ok(())
 }
 
+#[tokio::main]
+#[post(
+    "/decode/raw-tx",
+    format = "application/json",
+    data = "<txraw>"
+)]
+async fn decode_raw_transactions(txraw:Json<TxRequest>)->std::result::Result<Json<serde_json::Value>, reqwest::Error>{
+    let BTCNODE = dotenv::var("BTCNODE").unwrap();
+    let ETHNODE = dotenv::var("ETHNODE").unwrap();
+    let tx_raw: Json<TxRequest> = txraw;
+    let request_url = format!("{}wallet/ipay", BTCNODE);
+    let USER = dotenv::var("BTCUSER").unwrap();
+    let PASSWORD = dotenv::var("BTCPASSWORD").unwrap();
+    let auth = format!("Basic {}", encode(USER + ":" + &PASSWORD));
+    let body = json!({"jsonrpc": "1.0", "id": "curltest", "method": "decoderawtransaction", "params": [tx_raw.rawtx]});
+    let client = reqwest::Client::new();
+    let res = client
+        .post(request_url.clone())
+        .header("Authorization", auth.clone())
+        .json(&body)
+        .send()
+        .await?;
+    let decoded: serde_json::Value = res.json().await?;
+    return Ok(Json(decoded));
+}
+
 fn main() {
     rocket::ignite()
         .attach(CORS)
         .mount("/", routes![index])
         .mount("/api", routes![create_address, create_transfer])
+        .mount("/api/btc", routes![decode_raw_transactions])
         .launch();
 }
